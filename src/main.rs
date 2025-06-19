@@ -1,4 +1,7 @@
-use std::io::{self, BufReader, Read};
+use std::{
+    error::Error,
+    io::{self, BufReader, Cursor, Read, Write},
+};
 
 const BASE64_CHARS: &[u8] = concat!(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ", // uppercase
@@ -44,8 +47,7 @@ fn encode_remainder(remainder: Vec<u8>) -> String {
     }
 }
 
-fn main() -> std::io::Result<()> {
-    let mut reader = BufReader::new(io::stdin().lock());
+fn encode_stream<R: Read, W: Write>(mut reader: R, mut writer: W) -> Result<(), Box<dyn Error>> {
     let mut buffer = [0u8; BUFSIZE];
     let mut remainder = Vec::new();
 
@@ -55,24 +57,39 @@ fn main() -> std::io::Result<()> {
             break; // EOF
         };
 
-        let chunks = buffer[..nread].chunks_exact(3);
+        let mut data = remainder;
+        data.extend_from_slice(&buffer[..nread]);
+
+        let chunks = data.chunks_exact(3);
         for chunk in chunks.clone() {
             let c = chunk.try_into().unwrap();
             let [a, b, c, d] = split_chunk(c).map(|n| byte_to_char(n));
-            print!("{}{}{}{}", a, b, c, d);
+            write!(writer, "{}{}{}{}", a, b, c, d)?;
         }
 
         remainder = chunks.remainder().to_vec();
     }
 
     if !remainder.is_empty() {
-        print!("{}", encode_remainder(remainder));
+        write!(writer, "{}", encode_remainder(remainder))?;
     }
 
-    // trailing newline
-    print!("\n");
-
     Ok(())
+}
+
+pub fn encode<T: AsRef<[u8]>>(input: T) -> Result<String, Box<dyn Error>> {
+    let bytes = input.as_ref();
+    let mut output = Vec::new();
+
+    encode_stream(Cursor::new(bytes), &mut output)?;
+
+    Ok(String::from_utf8(output)?)
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let reader = BufReader::new(io::stdin().lock());
+
+    encode_stream(reader, io::stdout())
 }
 
 #[cfg(test)]
@@ -117,5 +134,17 @@ mod test {
     fn test_encode_remainder_invalid() {
         let remainder = Vec::from([0, 0, 0]);
         encode_remainder(remainder);
+    }
+
+    #[test]
+    fn test_encode() {
+        // see https://datatracker.ietf.org/doc/html/rfc4648#section-10
+        assert_eq!("", encode("").unwrap());
+        assert_eq!("Zg==", encode("f").unwrap());
+        assert_eq!("Zm8=", encode("fo").unwrap());
+        assert_eq!("Zm9v", encode("foo").unwrap());
+        assert_eq!("Zm9vYg==", encode("foob").unwrap());
+        assert_eq!("Zm9vYmE=", encode("fooba").unwrap());
+        assert_eq!("Zm9vYmFy", encode("foobar").unwrap());
     }
 }
