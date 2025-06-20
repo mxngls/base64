@@ -38,7 +38,7 @@ fn encode_remainder(remainder: Vec<u8>) -> String {
     let mut padded = [0u8; 3];
     padded[..remainder.len()].copy_from_slice(&remainder);
 
-    let [a, b, c, _] = split_chunk(&padded).map(|n| byte_to_char(n));
+    let [a, b, c, _] = split_chunk(&padded).map(byte_to_char);
 
     if remainder.len() == 2 {
         format!("{}{}{}=", a, b, c)
@@ -66,7 +66,7 @@ pub fn encode_stream<R: Read, W: Write>(
         let chunks = data.chunks_exact(3);
         for chunk in chunks.clone() {
             let c = chunk.try_into().unwrap();
-            let [a, b, c, d] = split_chunk(c).map(|n| byte_to_char(n));
+            let [a, b, c, d] = split_chunk(c).map(byte_to_char);
             write!(writer, "{}{}{}{}", a, b, c, d)?;
         }
 
