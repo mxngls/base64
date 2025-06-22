@@ -53,3 +53,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_decode_equals_encode() {
+        let original = b"Hello, World!";
+
+        let mut encoded = Vec::new();
+        let mut decoded = Vec::new();
+
+        encode_stream(Cursor::new(original), &mut encoded).unwrap();
+        decode_stream(Cursor::new(&encoded), &mut decoded).unwrap();
+
+        assert_eq!(original.to_vec(), decoded);
+    }
+}
