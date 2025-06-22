@@ -14,7 +14,7 @@ const BASE64_CHARS: &[u8] = concat!(
 const BUFSIZE: usize = 4096;
 
 #[inline]
-fn byte_to_char(b: u8) -> char {
+fn encode_byte(b: u8) -> char {
     BASE64_CHARS[b as usize] as char
 }
 
@@ -39,7 +39,7 @@ fn encode_remainder(remainder: Vec<u8>) -> String {
     let mut padded = [0u8; 3];
     padded[..remainder.len()].copy_from_slice(&remainder);
 
-    let [a, b, c, _] = split_chunk(&padded).map(byte_to_char);
+    let [a, b, c, _] = split_chunk(&padded).map(encode_byte);
 
     if remainder.len() == 2 {
         format!("{}{}{}=", a, b, c)
@@ -69,7 +69,7 @@ pub fn encode_stream<R: Read, W: Write>(
 
         for chunk in chunks {
             let chunk = chunk.try_into().unwrap();
-            let [a, b, c, d] = split_chunk(chunk).map(byte_to_char);
+            let [a, b, c, d] = split_chunk(chunk).map(encode_byte);
             write!(writer, "{}{}{}{}", a, b, c, d)?;
         }
     }
@@ -95,15 +95,15 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_byte_to_char() {
-        assert_eq!('A', byte_to_char(0));
-        assert_eq!('Z', byte_to_char(25));
-        assert_eq!('a', byte_to_char(26));
-        assert_eq!('z', byte_to_char(51));
-        assert_eq!('0', byte_to_char(52));
-        assert_eq!('9', byte_to_char(61));
-        assert_eq!('+', byte_to_char(62));
-        assert_eq!('/', byte_to_char(63));
+    fn test_encode_byte() {
+        assert_eq!('A', encode_byte(0));
+        assert_eq!('Z', encode_byte(25));
+        assert_eq!('a', encode_byte(26));
+        assert_eq!('z', encode_byte(51));
+        assert_eq!('0', encode_byte(52));
+        assert_eq!('9', encode_byte(61));
+        assert_eq!('+', encode_byte(62));
+        assert_eq!('/', encode_byte(63));
     }
 
     #[test]
