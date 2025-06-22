@@ -47,7 +47,7 @@ fn decode_byte(c: u8) -> Result<u8, &'static str> {
 }
 
 #[inline]
-fn split_chunk(chunk: [u8; 4]) -> [u8; 3] {
+fn coerce_chunk(chunk: [u8; 4]) -> [u8; 3] {
     [
         chunk[0] << 2 | chunk[1] >> 4,
         chunk[1] << 4 | chunk[2] >> 2,
@@ -76,20 +76,15 @@ pub fn decode_stream<R: Read, W: Write>(
 
         for chunk in chunks {
             let chunk: [u8; 4] = chunk.try_into().unwrap();
-            let mut decoded_chunk = [0u8; 4];
+            let nvalid = chunk.iter().position(|b| *b == b'=').unwrap_or(4);
 
-            let nvalid = 0;
-            for (nvalid, &byte) in chunk.iter().enumerate() {
-                if byte == b'=' {
-                    break;
-                }
-                decoded_chunk[nvalid] = decode_byte(byte)?;
+            let mut decoded = [0u8; 4];
+            for i in 0..nvalid {
+                decoded[i] = decode_byte(chunk[i])?;
             }
 
-            let decoded = split_chunk(decoded_chunk);
-            let output_len = (nvalid * 3) / 4; // 4→3, 3→2, 2→1
-            writer.write_all(&split_chunk(decoded_chunk)[..output_len])?;
-            writer.write_all(&decoded)?;
+            let chunk = coerce_chunk(decoded);
+            writer.write_all(&chunk[..(nvalid * 3) / 4])?;
         }
     }
 
@@ -105,4 +100,40 @@ pub fn decode<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, Box<dyn Error>> {
     decode_stream(Cursor::new(bytes), &mut output)?;
 
     Ok(output)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_decode_byte() {
+        assert_eq!(0, decode_byte(b'A').unwrap());
+        assert_eq!(25, decode_byte(b'Z').unwrap());
+        assert_eq!(26, decode_byte(b'a').unwrap());
+        assert_eq!(51, decode_byte(b'z').unwrap());
+        assert_eq!(52, decode_byte(b'0').unwrap());
+        assert_eq!(61, decode_byte(b'9').unwrap());
+        assert_eq!(62, decode_byte(b'+').unwrap());
+        assert_eq!(63, decode_byte(b'/').unwrap());
+    }
+
+    #[test]
+    fn test_coerce_chunk() {
+        assert_eq!([b'M', b'a', b'n'], coerce_chunk([19, 22, 5, 46]));
+        assert_eq!([0, 0, 0], coerce_chunk([0, 0, 0, 0]));
+        assert_eq!([255, 255, 255], coerce_chunk([63, 63, 63, 63]))
+    }
+
+    #[test]
+    fn test_decode() {
+        // see https://datatracker.ietf.org/doc/html/rfc4648#section-10
+        assert_eq!(b"".to_vec(), decode("").unwrap());
+        assert_eq!(b"f".to_vec(), decode("Zg==").unwrap());
+        assert_eq!(b"fo".to_vec(), decode("Zm8=").unwrap());
+        assert_eq!(b"foo".to_vec(), decode("Zm9v").unwrap());
+        assert_eq!(b"foob".to_vec(), decode("Zm9vYg==").unwrap());
+        assert_eq!(b"fooba".to_vec(), decode("Zm9vYmE=").unwrap());
+        assert_eq!(b"foobar".to_vec(), decode("Zm9vYmFy").unwrap());
+    }
 }
